@@ -32,4 +32,4 @@ def test_identity_is_acme_assistant(question):
 
 
 def test_introduces_itself_as_acme_assistant():
-    assert "acme assistant" in ask("Who are you?")
+        assert "handbook assistant" in ask("Who are you?")

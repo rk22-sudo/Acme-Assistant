@@ -4,8 +4,8 @@ from fastapi import FastAPI, HTTPException
 from google.genai.errors import APIError
 from pydantic import BaseModel
 
-from app.llm import LLMConfigurationError, chat
-from app.prompts import SYSTEM_PROMPT
+from app.llm import LLMConfigurationError
+from app.rag import answer
 
 app = FastAPI(title="Acme Assistant")
 
@@ -26,8 +26,17 @@ class ChatRequest(BaseModel):
             raise ValueError("The conversation must end with a user message")
 
 
+class Source(BaseModel):
+    n: int
+    title: str
+    heading: str
+    url: str
+    score: float
+
+
 class ChatResponse(BaseModel):
     reply: str
+    sources: list[Source] = []
 
 
 @app.get("/health")
@@ -43,13 +52,17 @@ def chat_endpoint(req: ChatRequest):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        reply = chat([m.model_dump() for m in req.messages], SYSTEM_PROMPT)
+        result = answer([m.model_dump() for m in req.messages])
     except LLMConfigurationError as exc:
         raise HTTPException(status_code=503, detail="The chat service is not configured") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="The search index has not been built yet") from exc
+    except RuntimeError as exc:  # daily embedding quota
+        raise HTTPException(status_code=503, detail="Search quota exhausted, try again later") from exc
     except APIError as exc:
         status_code = 503 if exc.code >= 500 else 502
         raise HTTPException(
             status_code=status_code,
             detail="The language model provider could not complete the request",
         ) from exc
-    return ChatResponse(reply=reply)
+    return ChatResponse(**result)
