@@ -32,3 +32,28 @@ def test_out_of_scope_question_is_not_answered_from_thin_air():
     result = answer([{"role": "user", "content": "What is on the cafeteria menu today?"}])
     assert not result["sources"], result
     assert not re.search(r"\[\d+\]", result["reply"]), result["reply"]
+
+def test_follow_up_question_keeps_context():
+    messages = [
+        {"role": "user", "content": EEO_QUESTION},
+        {"role": "assistant", "content": "Within 48 hours of the incident [1]."},
+        {"role": "user", "content": "And who exactly do I report it to?"},
+    ]
+    result = answer(messages)
+    reply = result["reply"].lower()
+    assert any(w in reply for w in ["management", "hr", "legal"]), result["reply"]
+    assert re.search(r"\[\d+\]", result["reply"]), result["reply"]
+    assert all(s["url"].startswith("https://handbook.gitlab.com/handbook/") for s in result["sources"])
+
+def test_policy_answer_does_not_introduce_itself():
+    result = answer([{"role": "user", "content": EEO_QUESTION}])
+    assert "handbook assistant" not in result["reply"].lower(), result["reply"]
+
+def test_leave_policy_is_grounded_not_invented():
+    # Phase 1 invented "20 days PTO" and an "HR portal" for this exact question.
+    result = answer([{"role": "user", "content": "What's our leave policy?"}])
+    reply = result["reply"].lower()
+    assert re.search(r"\[\d+\]", result["reply"]), result["reply"]
+    assert result["sources"], result
+    for invented in ["20 days", "acme corp"]:
+        assert invented not in reply, result["reply"]

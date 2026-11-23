@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.llm import LLMConfigurationError
 from app.rag import answer
 
-app = FastAPI(title="Acme Assistant")
+app = FastAPI(title="Handbook Assistant")
 
 
 class Message(BaseModel):
