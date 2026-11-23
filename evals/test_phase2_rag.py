@@ -3,6 +3,8 @@ import time
 
 import pytest
 
+pytestmark = pytest.mark.live
+
 from app.rag import answer
 from app.retrieval import search
 

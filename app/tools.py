@@ -1,11 +1,12 @@
 import json
+import os
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 EMPLOYEES = ROOT / "data" / "synthetic" / "employees.json"
-STATE = ROOT / "data" / "state"  # gitignored; tests point this at a temp folder
+STATE = Path(os.getenv("HANDBOOK_STATE_DIR") or ROOT / "data" / "state")  # gitignored
 
 LEAVE_TYPES = ("annual", "sick")
 CATEGORIES = ("it", "hr", "facilities", "other")

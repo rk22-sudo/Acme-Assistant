@@ -2,6 +2,8 @@ import time
 
 import pytest
 
+pytestmark = pytest.mark.live
+
 from app.llm import chat
 from app.prompts import SYSTEM_PROMPT
 

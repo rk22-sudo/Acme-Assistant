@@ -5,10 +5,16 @@ from google.genai.errors import APIError
 from pydantic import BaseModel
 
 from app.llm import LLMConfigurationError
-from app.rag import answer
+import os
+
+from mcp import MCPError
+
+from app.agent import run as run_agent
 
 app = FastAPI(title="Handbook Assistant")
 
+# Phase 3 stand-in for a logged-in user. Phase 4 replaces this with a verified identity.
+DEMO_EMPLOYEE_ID = os.getenv("DEMO_EMPLOYEE_ID", "E001")
 
 class Message(BaseModel):
     role: Literal["user", "assistant"]
@@ -37,6 +43,7 @@ class Source(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     sources: list[Source] = []
+    tool_calls: list[dict] = []
 
 
 @app.get("/health")
@@ -45,18 +52,20 @@ def health():
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat_endpoint(req: ChatRequest):
+async def chat_endpoint(req: ChatRequest):
     try:
         req.validate_conversation()
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
-        result = answer([m.model_dump() for m in req.messages])
+               result = await run_agent([m.model_dump() for m in req.messages], DEMO_EMPLOYEE_ID)
     except LLMConfigurationError as exc:
         raise HTTPException(status_code=503, detail="The chat service is not configured") from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail="The search index has not been built yet") from exc
+    except MCPError as exc:
+        raise HTTPException(status_code=503, detail="The tool service is unavailable") from exc
     except RuntimeError as exc:  # daily embedding quota
         raise HTTPException(status_code=503, detail="Search quota exhausted, try again later") from exc
     except APIError as exc:

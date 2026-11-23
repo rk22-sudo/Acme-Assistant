@@ -2,11 +2,16 @@ import pytest
 
 from app import tools
 
+from datetime import date, timedelta
+
 
 @pytest.fixture(autouse=True)
 def temp_state(tmp_path, monkeypatch):
     monkeypatch.setattr(tools, "STATE", tmp_path)
 
+def _monday(weeks_ahead: int = 2) -> date:
+    d = date.today() + timedelta(weeks=weeks_ahead)
+    return d + timedelta(days=(7 - d.weekday()) % 7)  # a Monday on or after that date
 
 def test_balance_for_known_employee():
     r = tools.get_leave_balance("E001")
@@ -19,13 +24,16 @@ def test_unknown_employee_is_an_error():
 
 
 def test_request_leave_reduces_remaining():
-    r = tools.request_leave("E001", "annual", "2026-12-07", "2026-12-09")  # Mon-Wed
+    mon = _monday()
+    r = tools.request_leave("E001", "annual", mon.isoformat(), (mon + timedelta(days=2)).isoformat())  # Mon-Wed
     assert r["status"] == "pending" and r["days"] == 3
     assert tools.get_leave_balance("E001")["annual"]["remaining"] == 11
 
 
 def test_weekend_only_range_rejected():
-    assert "error" in tools.request_leave("E001", "annual", "2026-12-05", "2026-12-06")
+    sat = _monday() - timedelta(days=2)
+    r = tools.request_leave("E001", "annual", sat.isoformat(), (sat + timedelta(days=1)).isoformat())
+    assert "no working days" in r["error"]
 
 
 def test_past_dates_rejected():
@@ -33,7 +41,9 @@ def test_past_dates_rejected():
 
 
 def test_over_balance_rejected():
-    assert "error" in tools.request_leave("E002", "annual", "2026-12-07", "2026-12-18")  # 10 days, 2 left
+    mon = _monday()
+    r = tools.request_leave("E002", "annual", mon.isoformat(), (mon + timedelta(days=11)).isoformat())  # 10 weekdays
+    assert "only 2 remaining" in r["error"]
 
 
 def test_bad_inputs_rejected():
