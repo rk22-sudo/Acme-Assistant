@@ -1,0 +1,8 @@
+[
+  {"id": "E001", "name": "Asha Verma", "email": "asha.verma@example.test", "manager_id": "E003",
+   "leave": {"annual": {"total": 20, "used": 6}, "sick": {"total": 10, "used": 1}}},
+  {"id": "E002", "name": "Ben Carter", "email": "ben.carter@example.test", "manager_id": "E003",
+   "leave": {"annual": {"total": 20, "used": 18}, "sick": {"total": 10, "used": 0}}},
+  {"id": "E003", "name": "Carla Mendes", "email": "carla.mendes@example.test", "manager_id": null,
+   "leave": {"annual": {"total": 25, "used": 10}, "sick": {"total": 10, "used": 2}}}
+]
