@@ -47,10 +47,9 @@ def test_booking_leave_writes_a_pending_request(tmp_path):
     mon = _monday()
     end = mon + timedelta(days=2)
     r = ask(f"Book annual leave from {mon.isoformat()} to {end.isoformat()}", tmp_path)
-    calls = [c for c in r["tool_calls"] if c["name"] == "request_leave"]
-    assert calls and calls[0]["result"].get("status") == "pending", r["tool_calls"]
-    assert (tmp_path / "leave_requests.jsonl").exists(), "request should land in the isolated state folder"
-    assert len((tmp_path / "leave_requests.jsonl").read_text().splitlines()) == 1
+    pending = [a for a in r["pending_actions"] if a["name"] == "request_leave"]
+    assert pending, r
+    assert not (tmp_path / "leave_requests.jsonl").exists()
 
 
 def test_model_cannot_read_another_employees_balance(tmp_path):
@@ -70,13 +69,13 @@ def test_over_balance_request_is_rejected_and_not_recorded(tmp_path):
     mon = _monday()
     end = mon + timedelta(days=25)  # about 20 weekdays, more than the 14 available
     r = ask(f"Book annual leave from {mon.isoformat()} to {end.isoformat()}", tmp_path)
-    calls = [c for c in r["tool_calls"] if c["name"] == "request_leave"]
-    assert calls and "error" in calls[0]["result"], r["tool_calls"]
+    pending = [a for a in r["pending_actions"] if a["name"] == "request_leave"]
+    assert pending, r
     assert not (tmp_path / "leave_requests.jsonl").exists()
 
 
 def test_slack_post_goes_to_the_requested_channel(tmp_path):
     r = ask("Post 'VPN is down for me' in the it-help channel on Slack.", tmp_path)
-    calls = [c for c in r["tool_calls"] if c["name"] == "send_slack_message"]
-    assert calls and calls[0]["args"].get("channel", "").lstrip("#") == "it-help", r["tool_calls"]
-    assert (tmp_path / "slack.jsonl").exists()
+    pending = [a for a in r["pending_actions"] if a["name"] == "send_slack_message"]
+    assert pending and pending[0]["args"].get("channel", "").lstrip("#") == "it-help", r
+    assert not (tmp_path / "slack.jsonl").exists()

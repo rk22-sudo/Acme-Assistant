@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import sys
 from datetime import date
@@ -10,6 +11,7 @@ from mcp import ClientSession, MCPError, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from app.llm import MODEL, _get_client
+from app.guardrails import detect_injection
 from app.prompts import AGENT_RULES, SYSTEM_PROMPT
 from app.retrieval import search
 
@@ -17,6 +19,8 @@ ROOT = Path(__file__).resolve().parent.parent
 MAX_ROUNDS = 4  # each round is one Gemini request; the free tier is tight
 TOP_K = 5
 IDENTITY_ARG = "employee_id"  # injected by us, never chosen by the model
+WRITE_TOOLS = {"request_leave", "approve_leave", "create_ticket", "send_slack_message"}
+logger = logging.getLogger(__name__)
 
 SEARCH_TOOL = types.FunctionDeclaration(
     name="search_handbook",
@@ -71,6 +75,14 @@ async def _search_handbook(query: str, sources: list[dict]) -> dict:
     hits = await anyio.to_thread.run_sync(search, query, TOP_K)  # embedding call blocks, keep it off the loop
     out = []
     for h in hits:
+        patterns = detect_injection(h["text"])
+        if patterns:
+            logger.warning(
+                "Skipped poisoned handbook chunk id=%s; patterns=%s",
+                h["id"],
+                patterns,
+            )
+            continue
         n = next((i for i, s in enumerate(sources, 1) if s["id"] == h["id"]), None)
         if n is None:
             sources.append(h)
@@ -93,9 +105,35 @@ async def run(messages: list[dict], employee_id: str, state_dir: str | None = No
         raise _leaf(group) from group
 
 
+async def execute_tool(name: str, args: dict, employee_id: str, state_dir: str | None = None) -> dict:
+    """Execute a confirmed write tool as the authenticated employee."""
+    if name not in WRITE_TOOLS:
+        raise ValueError(f"Tool is not a confirmable write: {name}")
+    env = {"HANDBOOK_STATE_DIR": state_dir} if state_dir else None
+    params = StdioServerParameters(
+        command=sys.executable, args=["-m", "app.mcp_server"], cwd=str(ROOT), env=env
+    )
+    try:
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                mcp_tools = (await session.list_tools()).tools
+                takes_identity = {
+                    tool.name for tool in mcp_tools
+                    if IDENTITY_ARG in tool.input_schema.get("properties", {})
+                }
+                raw = await session.call_tool(
+                    name, build_args(name, args, takes_identity, employee_id)
+                )
+                return _parse(raw)
+    except BaseExceptionGroup as group:
+        raise _leaf(group) from group
+
+
 async def _run(messages: list[dict], employee_id: str, state_dir: str | None = None) -> dict:
     sources: list[dict] = []
     tool_calls: list[dict] = []
+    pending: list[dict] = []
 
     contents = [
         types.Content(
@@ -136,6 +174,12 @@ async def _run(messages: list[dict], employee_id: str, state_dir: str | None = N
                     args = dict(call.args or {})
                     if call.name == "search_handbook":
                         result = await _search_handbook(str(args.get("query", "")), sources)
+                    elif call.name in WRITE_TOOLS:
+                        pending.append({
+                            "name": call.name,
+                            "args": {k: v for k, v in args.items() if k != IDENTITY_ARG},
+                        })
+                        result = {"status": "awaiting_user_confirmation"}
                     else:
                         try:
                             raw = await session.call_tool(call.name, build_args(call.name, args, takes_identity, employee_id))
@@ -154,4 +198,9 @@ async def _run(messages: list[dict], employee_id: str, state_dir: str | None = N
         for i, s in enumerate(sources, 1)
         if i in cited
     ]
-    return {"reply": reply, "sources": cited_sources, "tool_calls": tool_calls}
+    return {
+        "reply": reply,
+        "sources": cited_sources,
+        "tool_calls": tool_calls,
+        "pending_actions": pending,
+    }
