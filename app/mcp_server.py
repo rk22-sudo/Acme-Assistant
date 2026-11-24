@@ -7,6 +7,8 @@ mcp = MCPServer("handbook-tools")
 for fn in (
     tools.get_leave_balance,
     tools.request_leave,
+    tools.list_pending_approvals,
+    tools.approve_leave,
     tools.create_ticket,
     tools.list_tickets,
     tools.send_slack_message,

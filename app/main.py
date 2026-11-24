@@ -1,20 +1,18 @@
+import os
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from google.genai.errors import APIError
+from mcp import MCPError
 from pydantic import BaseModel
 
-from app.llm import LLMConfigurationError
-import os
-
-from mcp import MCPError
-
+from app import auth
 from app.agent import run as run_agent
+from app.llm import LLMConfigurationError
+from app.tools import _find
 
 app = FastAPI(title="Handbook Assistant")
 
-# Phase 3 stand-in for a logged-in user. Phase 4 replaces this with a verified identity.
-DEMO_EMPLOYEE_ID = os.getenv("DEMO_EMPLOYEE_ID", "E001")
 
 class Message(BaseModel):
     role: Literal["user", "assistant"]
@@ -23,7 +21,6 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[Message]
-
 
     def validate_conversation(self):
         if not self.messages:
@@ -46,20 +43,57 @@ class ChatResponse(BaseModel):
     tool_calls: list[dict] = []
 
 
+class LoginRequest(BaseModel):
+    employee_id: str
+
+
+def current_employee(authorization: str | None = Header(default=None)) -> str:
+    """Verify the bearer token and return the employee id it was issued for."""
+    challenge = {"WWW-Authenticate": "Bearer"}
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token", headers=challenge)
+    try:
+        return auth.verify_token(authorization[len("Bearer "):])
+    except auth.AuthConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="Authentication is not configured") from exc
+    except auth.AuthError as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token", headers=challenge) from exc
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
+@app.post("/auth/token")
+def mock_login(req: LoginRequest):
+    """Dev-only stand-in for a real identity provider. Disabled unless MOCK_LOGIN=1."""
+    if os.getenv("MOCK_LOGIN") != "1":
+        raise HTTPException(status_code=404, detail="Not found")
+    if not _find(req.employee_id):
+        raise HTTPException(status_code=404, detail="Unknown employee")
+    try:
+        return {"access_token": auth.create_token(req.employee_id), "token_type": "bearer"}
+    except auth.AuthConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="Authentication is not configured") from exc
+
+
 @app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(req: ChatRequest):
+async def chat_endpoint(
+    req: ChatRequest,
+    authorization: str | None = Header(default=None),
+):
     try:
         req.validate_conversation()
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # Validate the request body before checking credentials so malformed
+    # conversations consistently return 422, even when unauthenticated.
+    employee_id = current_employee(authorization)
+
     try:
-               result = await run_agent([m.model_dump() for m in req.messages], DEMO_EMPLOYEE_ID)
+        result = await run_agent([m.model_dump() for m in req.messages], employee_id)
     except LLMConfigurationError as exc:
         raise HTTPException(status_code=503, detail="The chat service is not configured") from exc
     except FileNotFoundError as exc:

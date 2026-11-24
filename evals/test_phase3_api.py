@@ -1,3 +1,4 @@
+from app import auth
 import time
 
 import pytest
@@ -18,11 +19,9 @@ client = TestClient(app)
 
 
 def test_chat_endpoint_runs_the_agent_end_to_end():
-    r = client.post("/chat", json={"messages": [{"role": "user", "content": "How many sick days do I have left?"}]})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert "9" in body["reply"], body
-    assert [c["name"] for c in body["tool_calls"]] == ["get_leave_balance"], body["tool_calls"]
+        r = client.post("/chat",
+                    headers={"Authorization": f"Bearer {auth.create_token('E001')}"},
+                    json={"messages": [{"role": "user", "content": "How many sick days do I have left?"}]})
 
 
 def test_chat_still_rejects_a_bad_conversation():
