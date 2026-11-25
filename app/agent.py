@@ -10,10 +10,12 @@ from google.genai import types
 from mcp import ClientSession, MCPError, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from app.llm import MODEL, _get_client
+from app.llm import _get_client
 from app.guardrails import detect_injection
 from app.prompts import AGENT_RULES, SYSTEM_PROMPT
 from app.retrieval import search
+from app.resilience import acall, model_chain
+from app.router import pick_model
 
 ROOT = Path(__file__).resolve().parent.parent
 MAX_ROUNDS = 4  # each round is one Gemini request; the free tier is tight
@@ -161,8 +163,15 @@ async def _run(messages: list[dict], employee_id: str, state_dir: str | None = N
             )
 
             reply = ""
+            chosen_model = pick_model(messages)
+            logger.info("Selected model=%s", chosen_model)
             for _ in range(MAX_ROUNDS):
-                resp = await _get_client().aio.models.generate_content(model=MODEL, contents=contents, config=config)
+                resp = await acall(
+                    lambda m: _get_client().aio.models.generate_content(
+                        model=m, contents=contents, config=config
+                    ),
+                    model_chain(chosen_model),
+                )
                 calls = resp.function_calls
                 if not calls:
                     reply = resp.text or ""

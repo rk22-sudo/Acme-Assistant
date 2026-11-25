@@ -10,12 +10,18 @@ from pydantic import BaseModel
 
 from app import auth
 from app.agent import execute_tool, run as run_agent
+from app.cache import ResponseCache, cacheable
 from app.guardrails import REFUSAL, detect_injection, redact_pii
 from app.llm import LLMConfigurationError
 from app.tools import _find
 
 app = FastAPI(title="Handbook Assistant")
 logger = logging.getLogger(__name__)
+try:
+    _cache_threshold = float(os.getenv("CACHE_THRESHOLD", ""))
+except ValueError:
+    _cache_threshold = None
+cache = ResponseCache(threshold=_cache_threshold)
 _LEAVE_BOOKING = re.compile(r"^\s*(?:please\s+)?(?:book|request|schedule|take)\b.{0,60}\bleave\b", re.I | re.S)
 _ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
@@ -126,6 +132,16 @@ async def chat_endpoint(
     if _LEAVE_BOOKING.search(last_message) and len(_ISO_DATE.findall(last_message)) < 2:
         return ChatResponse(reply="What start and end dates should I use for your leave request?")
 
+    cache_lookup = len(messages) == 1
+    if cache_lookup:
+        cached = cache.get(last_message)
+        if cached is not None:
+            logger.info("Response cache hit")
+            return ChatResponse(
+                reply=cached["reply"], sources=cached["sources"], tool_calls=[], pending_actions=[]
+            )
+        logger.info("Response cache miss")
+
     try:
         result = await run_agent(messages, employee_id)
     except LLMConfigurationError as exc:
@@ -142,7 +158,10 @@ async def chat_endpoint(
             status_code=status_code,
             detail="The language model provider could not complete the request",
         ) from exc
+    should_cache = cacheable(result, len(messages))
     result["reply"] = redact_pii(result["reply"], kinds=("SSN", "CARD"))[0]
+    if should_cache:
+        cache.put(last_message, {"reply": result["reply"], "sources": result["sources"]})
     result["tool_calls"] = [
         {"name": call["name"], "ok": "error" not in call["result"]}
         for call in result["tool_calls"]

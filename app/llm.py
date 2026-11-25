@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from app.resilience import call, model_chain
 
 load_dotenv()
 
@@ -42,12 +43,9 @@ def chat(messages: list[dict], system_prompt: str) -> str:
         )
         for m in messages
     ]
-    response = _get_client().models.generate_content(
-        model=MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            temperature=0.3,
-        ),
+    config = types.GenerateContentConfig(system_instruction=system_prompt, temperature=0.3)
+    response = call(
+        lambda m: _get_client().models.generate_content(model=m, contents=contents, config=config),
+        model_chain(MODEL),
     )
     return response.text or ""
