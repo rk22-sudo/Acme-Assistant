@@ -10,6 +10,7 @@ from google.genai import types
 from mcp import ClientSession, MCPError, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from app import observability as obs
 from app.llm import _get_client
 from app.guardrails import detect_injection
 from app.prompts import AGENT_RULES, SYSTEM_PROMPT
@@ -172,6 +173,7 @@ async def _run(messages: list[dict], employee_id: str, state_dir: str | None = N
                     ),
                     model_chain(chosen_model),
                 )
+                obs.add_usage(resp, chosen_model)
                 calls = resp.function_calls
                 if not calls:
                     reply = resp.text or ""

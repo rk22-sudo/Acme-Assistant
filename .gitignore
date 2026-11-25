@@ -5,3 +5,4 @@ __pycache__/
 pytest-cache-files-*/
 data/index/
 data/state/
+.ci-venv/

@@ -3,12 +3,13 @@ import logging
 import re
 from typing import Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from google.genai.errors import APIError
 from mcp import MCPError
 from pydantic import BaseModel
 
 from app import auth
+from app import observability as obs
 from app.agent import execute_tool, run as run_agent
 from app.cache import ResponseCache, cacheable
 from app.guardrails import REFUSAL, detect_injection, redact_pii
@@ -17,6 +18,7 @@ from app.tools import _find
 
 app = FastAPI(title="Handbook Assistant")
 logger = logging.getLogger(__name__)
+obs.setup_logging()
 try:
     _cache_threshold = float(os.getenv("CACHE_THRESHOLD", ""))
 except ValueError:
@@ -77,9 +79,33 @@ def current_employee(authorization: str | None = Header(default=None)) -> str:
         raise HTTPException(status_code=401, detail="Invalid or expired token", headers=challenge) from exc
 
 
+@app.middleware("http")
+async def observe(request: Request, call_next):
+    if request.url.path in ("/health", "/metrics"):
+        return await call_next(request)
+    ctx = obs.start_request()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        obs.finish_request(ctx, request.method, request.url.path, 500, error=type(exc).__name__)
+        raise
+    response.headers["X-Request-ID"] = ctx["request_id"]
+    obs.finish_request(ctx, request.method, request.url.path, response.status_code)
+    return response
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+def metrics(authorization: str | None = Header(default=None)):
+    """Ops view. hr_admin stands in for an 'admin' role in this demo."""
+    employee = _find(current_employee(authorization))
+    if not employee or employee.get("role") != "hr_admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+    return obs.summary()
 
 
 @app.post("/auth/token")
@@ -108,6 +134,7 @@ async def chat_endpoint(
     # Validate the request body before checking credentials so malformed
     # conversations consistently return 422, even when unauthenticated.
     employee_id = current_employee(authorization)
+    obs.note(employee_id=employee_id)
 
     messages = [m.model_dump() for m in req.messages]
     matches = [
@@ -121,6 +148,7 @@ async def chat_endpoint(
             employee_id,
             sorted({pattern for _, pattern in matches}),
         )
+        obs.note(blocked=True)
         return ChatResponse(reply=REFUSAL)
 
     messages = [
@@ -136,10 +164,12 @@ async def chat_endpoint(
     if cache_lookup:
         cached = cache.get(last_message)
         if cached is not None:
+            obs.note(cache="hit")
             logger.info("Response cache hit")
             return ChatResponse(
                 reply=cached["reply"], sources=cached["sources"], tool_calls=[], pending_actions=[]
             )
+        obs.note(cache="miss")
         logger.info("Response cache miss")
 
     try:
@@ -158,6 +188,7 @@ async def chat_endpoint(
             status_code=status_code,
             detail="The language model provider could not complete the request",
         ) from exc
+    obs.note_tools([c["name"] for c in result["tool_calls"]])  # before tool_calls is trimmed below
     should_cache = cacheable(result, len(messages))
     result["reply"] = redact_pii(result["reply"], kinds=("SSN", "CARD"))[0]
     if should_cache:
