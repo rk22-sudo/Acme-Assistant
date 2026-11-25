@@ -17,12 +17,14 @@ Environment variables:
 - `GEMINI_MODEL`: fast/default model; defaults to `gemini-3.5-flash-lite`.
 - `GEMINI_STRONG_MODEL`: optional model for long or complex requests.
 - `GEMINI_FALLBACK_MODEL`: optional fallback model after retries.
-- `CACHE_THRESHOLD`: optional cosine similarity threshold; unset or invalid disables semantic matching.
+- `CACHE_THRESHOLD`: leave unset. Semantic matching is disabled by measurement (see known gaps).
 
 Known gaps:
 - Cache is in-memory and per-process; entries are not shared or persisted.
 - Semantic cache matching is implemented but remains disabled until a measured threshold is selected.
 - Model routing is a heuristic and may not classify every request well.
-- The cache probe uses Gemini embeddings and was not run here.
-- The live Gemini evals were not run here.
+- Semantic cache is rejected, not pending: measured paraphrase similarity (0.803-0.902) overlaps wrong-pair similarity (up to 0.871) with gemini-embedding-001 at 768 dims, 16 pairs. The matching code exists but stays off (CACHE_THRESHOLD unset). Revisit only with a different embedding model or a re-ranking step.
+- Each fallback or retry multiplies Gemini requests per chat (up to 3 attempts x 2 models per round, 4 rounds), so a bad outage can burn the free-tier quota quickly.
+- Only exact-match caching is live, and it only covers single-turn handbook answers.
+
 Verified (user's terminal, 2026-11-25): 95 offline passed, 32 deselected; evals/test_phase6_live.py 2 passed; cache_probe: paraphrases min 0.803 vs wrong-pair max 0.871, so semantic cache left off.
