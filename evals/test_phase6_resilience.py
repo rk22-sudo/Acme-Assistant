@@ -83,3 +83,15 @@ def test_model_chain_dedupes_and_skips_empty(monkeypatch):
     assert resilience.model_chain("a") == ["a"]
     monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "b")
     assert resilience.model_chain("a") == ["a", "b"]
+
+def test_deadline_exceeded_skips_retries_and_uses_fallback():
+    calls = []
+
+    async def fn(model):
+        calls.append(model)
+        if model == "a":
+            raise err(504)
+        return "from-b"
+
+    assert run(fn, ["a", "b"]) == "from-b"
+    assert calls == ["a", "b"]

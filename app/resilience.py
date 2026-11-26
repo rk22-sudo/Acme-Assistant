@@ -24,6 +24,8 @@ def backoff(attempt: int) -> float:
 
 def _classify(exc: APIError) -> str:
     """'retry' = try this model again, 'next' = give up on this model, 'raise' = real error."""
+    if exc.code == 504:  # deadline exceeded: retrying the same slow model rarely helps
+        return "next"
     if exc.code not in RETRY_CODES:
         return "raise"
     if "PerDay" in str(exc):  # daily quota won't recover in seconds

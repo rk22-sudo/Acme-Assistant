@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handbook Assistant</title>
+<style>
+:root{--bg:#fff;--panel:#f7f7f8;--line:#e5e5e8;--text:#1d1d1f;--muted:#6e6e76;--accent:#5b5bd6;--accent-soft:#eeeefc;--ok:#1a7f4b;--bad:#c62828;--shadow:0 2px 10px rgba(0,0,0,.06)}
+@media(prefers-color-scheme:dark){:root{--bg:#161618;--panel:#202024;--line:#323238;--text:#ececf0;--muted:#9a9aa5;--accent:#8b8bf0;--accent-soft:#26263d;--ok:#4cc38a;--bad:#ff7b72;--shadow:0 2px 10px rgba(0,0,0,.4)}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;cursor:pointer}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600}
+.logo{width:24px;height:24px;border-radius:7px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:13px}
+.tools{display:flex;gap:8px;align-items:center}
+select,.ghost{background:transparent;border:1px solid var(--line);border-radius:8px;padding:5px 10px;color:var(--text);transition:.15s}
+select:hover,.ghost:hover{background:var(--panel)}
+#chat{flex:1;overflow-y:auto;scroll-behavior:smooth}
+.col{max-width:760px;margin:0 auto;padding:24px 18px}
+.empty{text-align:center;margin-top:12vh}
+.empty h1{font-size:26px;font-weight:600;margin:0 0 6px}
+.empty p{color:var(--muted);margin:0 0 26px}
+.sugs{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left}
+.sug{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:left;transition:.15s}
+.sug:hover{background:var(--panel);transform:translateY(-1px);box-shadow:var(--shadow)}
+.sug small{display:block;color:var(--muted)}
+.msg{display:flex;gap:12px;margin:0 0 22px;animation:in .25s ease}
+@keyframes in{from{opacity:0;transform:translateY(6px)}}
+.av{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;background:var(--accent);color:#fff}
+.user .av{background:var(--panel);color:var(--muted);border:1px solid var(--line)}
+.body{min-width:0;flex:1}
+.user .bubble{background:var(--panel);border-radius:14px;padding:8px 14px;display:inline-block;white-space:pre-wrap}
+.bubble p{margin:0 0 8px}.bubble ul{margin:0 0 8px;padding-left:20px}
+.bubble code,.bubble pre{background:var(--panel);border-radius:6px;padding:1px 5px;font-size:13px}
+.bubble pre{padding:10px;overflow:auto}
+.bubble.err{color:var(--bad)}
+.cite{display:inline-grid;place-items:center;min-width:17px;height:17px;border-radius:9px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;margin:0 1px;vertical-align:1px;transition:.15s}
+.cite:hover{background:var(--accent);color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:1px 9px}
+.chip.ok::before{content:"✓ ";color:var(--ok)}.chip.fail::before{content:"✕ ";color:var(--bad)}
+.src{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:7px 10px;text-decoration:none;color:inherit;font-size:13px;transition:.15s;max-width:100%}
+.src:hover,.src.flash{background:var(--accent-soft);border-color:var(--accent);transform:translateY(-1px)}
+.src b{flex:none;background:var(--accent-soft);color:var(--accent);border-radius:6px;padding:0 6px}
+.src span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.srcs{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.act{margin-top:10px;border:1px solid var(--accent);border-radius:12px;padding:12px;background:var(--accent-soft)}
+.act h4{margin:0 0 6px;font-size:13px}
+.act dl{margin:0 0 10px;font-size:13px;display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+.act dt{color:var(--muted)}.act dd{margin:0}
+.btn{border:0;border-radius:8px;padding:6px 14px;background:var(--accent);color:#fff;transition:.15s}
+.btn:hover{filter:brightness(1.1)}.btn.sec{background:transparent;color:var(--text);border:1px solid var(--line)}
+.act .res{font-size:13px;margin-top:6px}
+.tools-row{opacity:0;transition:.15s;margin-top:4px}
+.msg:hover .tools-row{opacity:1}
+.icon{background:none;border:0;color:var(--muted);padding:3px 6px;border-radius:6px;font-size:12px}
+.icon:hover{background:var(--panel);color:var(--text)}
+.dots span{display:inline-block;width:7px;height:7px;margin-right:4px;border-radius:50%;background:var(--muted);animation:b 1s infinite}
+.dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
+@keyframes b{50%{transform:translateY(-4px);opacity:.4}}
+footer{padding:0 18px 14px}
+.box{max-width:760px;margin:0 auto;display:flex;align-items:flex-end;gap:8px;border:1px solid var(--line);border-radius:22px;padding:8px 8px 8px 16px;background:var(--bg);box-shadow:var(--shadow);transition:.15s}
+.box:focus-within{border-color:var(--accent)}
+textarea{flex:1;border:0;outline:0;resize:none;background:transparent;color:var(--text);font:inherit;max-height:160px;padding:5px 0}
+#send{width:34px;height:34px;border-radius:50%;border:0;background:var(--accent);color:#fff;transition:.15s}
+#send:hover{transform:scale(1.08)}#send:disabled{opacity:.35;transform:none;cursor:default}
+.note{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+@media(max-width:560px){.sugs{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><div class="logo">H</div>Handbook Assistant</div>
+  <div class="tools">
+    <select id="user" title="Dev-only mock login: pick who you are"></select>
+    <button class="ghost" id="new" title="Start a new chat">+ New chat</button>
+  </div>
+</header>
+<main id="chat"><div class="col" id="col"></div></main>
+<footer>
+  <div class="box">
+    <textarea id="in" rows="1" placeholder="Ask about the handbook or your HR items…"></textarea>
+    <button id="send" title="Send (Enter)" disabled>↑</button>
+  </div>
+  <div class="note">Unofficial demo, not affiliated with GitLab. Answers can be wrong; check the sources.</div>
+</footer>
+<script>
+const $=s=>document.querySelector(s), col=$('#col'), inp=$('#in'), send=$('#send'), sel=$('#user');
+const USERS=[['E001','Asha Verma · Employee'],['E002','Ben Carter · Employee'],['E003','Carla Mendes · Manager'],['E004','Dana Okafor · HR admin']];
+const SUGS=[['Reporting harassment','How soon do I have to report discrimination or harassment I witness?'],
+['My leave balance','How many annual leave days do I have left?'],
+['Referrals','How do I submit a referral in Greenhouse?'],
+['Remote work in France','What does the France remote work charter say about expenses?']];
+let uid=sessionStorage.uid||'E001', token=sessionStorage.token||'', history=[], busy=false;
+USERS.forEach(([id,l])=>sel.add(new Option(l,id))); sel.value=uid;
+
+const esc=t=>t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const inl=t=>t.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+  .replace(/\[(\d+)\]/g,'<sup class="cite" data-n="$1">$1</sup>');
+function md(t){const o=[];let l=false;
+  for(const raw of esc(t).split('\n')){const m=raw.match(/^\s*[-*] (.*)/);
+    if(m){if(!l){o.push('<ul>');l=true}o.push('<li>'+inl(m[1])+'</li>')}
+    else{if(l){o.push('</ul>');l=false}if(raw.trim())o.push('<p>'+inl(raw)+'</p>')}}
+  if(l)o.push('</ul>');return o.join('')}
+const el=(tag,cls,html)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e};
+const bottom=()=>$('#chat').scrollTo(0,1e9);
+
+async function login(){
+  const r=await fetch('/auth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({employee_id:uid})});
+  if(!r.ok)throw new Error(r.status==404?'Login is off. Set MOCK_LOGIN=1 in .env and restart uvicorn.':'Login failed ('+r.status+')');
+  token=(await r.json()).access_token;sessionStorage.uid=uid;sessionStorage.token=token}
+async function api(path,body,retry=true){
+  if(!token)await login();
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(body)});
+  if(r.status==401&&retry){await login();return api(path,body,false)}
+  if(!r.ok){let d='';try{d=(await r.json()).detail}catch{}throw new Error(d||'Request failed ('+r.status+')')}
+  return r.json()}
+
+function empty(){col.innerHTML='';const e=el('div','empty','<h1>How can I help?</h1><p>Ask about GitLab’s public handbook, or your own leave and tickets.</p>');
+  const g=el('div','sugs');SUGS.forEach(([t,q])=>{const b=el('button','sug',`<b>${t}</b><small>${esc(q)}</small>`);b.onclick=()=>ask(q);g.append(b)});
+  e.append(g);col.append(e)}
+function addMsg(role,node){const m=el('div','msg '+role);m.append(el('div','av',role=='user'?'You'.slice(0,1):'H'));
+  const b=el('div','body');b.append(node);m.append(b);col.append(m);bottom();return b}
+
+function sources(b,list){if(!list.length)return;const w=el('div','srcs');
+  list.forEach(s=>{if(!/^https:\/\//.test(s.url))return;const a=el('a','src');a.id='s'+s.n+'-'+b.dataset.id;a.href=s.url;a.target='_blank';a.rel='noopener';
+    a.innerHTML='<b></b><span></span>';a.firstChild.textContent=s.n;a.lastChild.textContent=s.title+(s.heading?' › '+s.heading:'');a.title=s.title;w.append(a)});b.append(w);
+  b.querySelectorAll('.cite').forEach(c=>{const s=list.find(x=>x.n==c.dataset.n);if(!s)return c.style.display='none';
+    c.title=s.title+(s.heading?' › '+s.heading:'');
+    c.onclick=()=>{const a=$('#s'+s.n+'-'+b.dataset.id);if(a){a.classList.add('flash');a.scrollIntoView({block:'nearest'});setTimeout(()=>a.classList.remove('flash'),900)}}})}
+function toolChips(b,calls){if(!calls.length)return;const w=el('div','chips');
+  calls.forEach(c=>{const x=el('span','chip '+(c.ok?'ok':'fail'));x.textContent=c.name;x.title=c.ok?'Tool call succeeded':'Tool returned an error';w.append(x)});b.append(w)}
+function actionCard(b,a){const c=el('div','act');const h=el('h4');h.textContent='Confirm: '+a.name.replace(/_/g,' ');c.append(h);
+  const d=el('dl');Object.entries(a.args).forEach(([k,v])=>{const t=el('dt');t.textContent=k;const x=el('dd');x.textContent=v;d.append(t,x)});c.append(d);
+  const ok=el('button','btn');ok.textContent='Confirm';const no=el('button','btn sec');no.textContent='Dismiss';no.style.marginLeft='8px';
+  const res=el('div','res');
+  ok.onclick=async()=>{ok.disabled=no.disabled=true;try{const r=(await api('/chat/confirm',{action_token:a.action_token})).result;
+    res.textContent=r.error?'Not done: '+r.error:'Done ✓ '+(r.request_id||r.ticket_id||r.status||'');res.style.color=r.error?'var(--bad)':'var(--ok)'}
+    catch(e){res.textContent=e.message;res.style.color='var(--bad)'}};
+  no.onclick=()=>{c.remove()};c.append(ok,no,res);b.append(c)}
+function copyBtn(b,text){const r=el('div','tools-row');const c=el('button','icon');c.textContent='Copy';c.title='Copy reply';
+  c.onclick=()=>{navigator.clipboard.writeText(text);c.textContent='Copied';setTimeout(()=>c.textContent='Copy',1200)};r.append(c);b.append(r)}
+
+async function ask(text){
+  text=text.trim();if(!text||busy)return;busy=true;send.disabled=true;
+  if(!history.length)col.innerHTML='';
+  const u=el('div','bubble');u.textContent=text;addMsg('user',u);inp.value='';inp.style.height='auto';
+  history.push({role:'user',content:text});
+  const wait=el('div','bubble dots','<span></span><span></span><span></span>');const body=addMsg('bot',wait);body.dataset.id=history.length;
+  try{const r=await api('/chat',{messages:history});
+    const bub=el('div','bubble',md(r.reply));wait.replaceWith(bub);history.push({role:'assistant',content:r.reply});
+    sources(body,r.sources||[]);toolChips(body,r.tool_calls||[]);(r.pending_actions||[]).forEach(a=>actionCard(body,a));copyBtn(body,r.reply)}
+  catch(e){history.pop();const bub=el('div','bubble err');bub.textContent=e.message;wait.replaceWith(bub)}
+  busy=false;send.disabled=!inp.value.trim();bottom();inp.focus()}
+
+inp.oninput=()=>{inp.style.height='auto';inp.style.height=inp.scrollHeight+'px';send.disabled=busy||!inp.value.trim()};
+inp.onkeydown=e=>{if(e.key=='Enter'&&!e.shiftKey){e.preventDefault();ask(inp.value)}};
+send.onclick=()=>ask(inp.value);
+$('#new').onclick=()=>{history=[];busy=false;empty();inp.focus()};
+sel.onchange=async()=>{uid=sel.value;token='';history=[];empty();try{await login()}catch(e){col.append(el('div','bubble err',esc(e.message)))}};
+empty();inp.focus();
+</script>
+</body>
+</html>

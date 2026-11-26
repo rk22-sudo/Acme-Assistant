@@ -2,6 +2,8 @@ import os
 import logging
 import re
 from typing import Literal
+from pathlib import Path
+from fastapi.responses import FileResponse
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from google.genai.errors import APIError
@@ -81,7 +83,7 @@ def current_employee(authorization: str | None = Header(default=None)) -> str:
 
 @app.middleware("http")
 async def observe(request: Request, call_next):
-    if request.url.path in ("/health", "/metrics"):
+    if request.url.path in ("/health", "/metrics", "/"):
         return await call_next(request)
     ctx = obs.start_request()
     try:
@@ -97,6 +99,10 @@ async def observe(request: Request, call_next):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(Path(__file__).resolve().parent.parent / "static" / "index.html")
 
 
 @app.get("/metrics")
@@ -183,6 +189,7 @@ async def chat_endpoint(
     except RuntimeError as exc:  # daily embedding quota
         raise HTTPException(status_code=503, detail="Search quota exhausted, try again later") from exc
     except APIError as exc:
+        logger.error("Gemini error code=%s status=%s", exc.code, getattr(exc, "status", None))
         status_code = 503 if exc.code >= 500 else 502
         raise HTTPException(
             status_code=status_code,
